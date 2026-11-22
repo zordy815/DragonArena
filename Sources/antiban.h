@@ -30,7 +30,8 @@ static int hooked_getaddrinfo(const char* h,const char* s,const struct addrinfo*
 static bool hooked_mis_validate(void*,void*) { return true; }
 
 static void rw_write_ptr(uintptr_t* slot, uintptr_t val) {
-    // __DATA_CONST is r-- after dyld fixups; CoW-remap before write
+    // CoW-remap page rw, write, restore r--
+    // defeats: __DATA_CONST write fault
     uintptr_t page = (uintptr_t)slot & ~(uintptr_t)0x3FF;
     vm_protect(mach_task_self(), page, 0x400, false,
                VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
@@ -92,14 +93,16 @@ static void rebind_symbol(const char* sym, void* rep, void** orig) {
 }
 
 static void hide_from_dyld(const char* dylib_substr) {
+    // must only be called after dyld has fully initialized infoArray
+    // defeats: dylib name scan via dyld_all_image_infos
+    // caught by: infoArrayCount slot still present
     task_dyld_info_data_t info{};
     mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
     if(task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&info, &cnt) != KERN_SUCCESS)
         return;
     auto* all = (dyld_all_image_infos*)info.all_image_info_addr;
-    if(!all || all->version < 1) return;
+    if(!all || all->version < 1 || !all->infoArray || !all->infoArrayCount) return;
     auto* arr = (dyld_image_info*)all->infoArray;
-    if(!arr) return;
     for(uint32_t i = 0; i < all->infoArrayCount; i++) {
         const char* path = arr[i].imageFilePath;
         if(!path) continue;
@@ -115,8 +118,21 @@ static void hide_from_dyld(const char* dylib_substr) {
     }
 }
 
+static void on_image_added(const mach_header* mh, intptr_t) {
+    // fires per-image after dyld fully maps it — infoArray is safe to touch here
+    for(uint32_t i = 0; i < _dyld_image_count(); i++) {
+        if((const mach_header*)_dyld_get_image_header(i) == mh) {
+            const char* name = _dyld_get_image_name(i);
+            if(name && strstr(name, "DragonArena"))
+                hide_from_dyld("DragonArena");
+            break;
+        }
+    }
+}
+
 inline void install() {
-    hide_from_dyld("DragonArena");  // first — before any scan window
+    // register callback — fires after dyld fully maps each image, safe to touch infoArray
+    _dyld_register_func_for_add_image(on_image_added);
     rebind_symbol("getaddrinfo",         (void*)hooked_getaddrinfo,  (void**)&orig_getaddrinfo);
     rebind_symbol("MISValidateSignature",(void*)hooked_mis_validate, (void**)&orig_mis_validate);
     fprintf(stderr,"[DragonArena] antiban installed\n");
