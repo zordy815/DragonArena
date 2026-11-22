@@ -26,6 +26,12 @@ jobs:
         cp Sources/fishhook/fishhook.h Sources/
         cp Sources/fishhook/fishhook.c Sources/
 
+    - name: Patch ImGui for iOS SDK
+      run: |
+        # Force math includes at top of imgui_internal.h
+        sed -i '' '1s/^/#include <math.h>\n#include <stdlib.h>\n#include <string.h>\n/' Sources/imgui/imgui_internal.h
+        sed -i '' '1s/^/#include <math.h>\n#include <stdlib.h>\n/' Sources/imgui/imgui.h
+
     - name: Build dylib
       run: |
         SDK=$(xcrun --sdk iphoneos --show-sdk-path)
@@ -42,8 +48,6 @@ jobs:
           -DTARGET_OS_IPHONE=1 \
           -DFISHHOOK_AVAILABLE=1 \
           -DIMGUI_DEFINE_MATH_OPERATORS \
-          -include math.h \
-          -include stdlib.h \
           -I Sources \
           -I Sources/imgui \
           -dynamiclib \
