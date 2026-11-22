@@ -1,13 +1,16 @@
 // lang: C++17 | file: antiban.h | runtime: iOS arm64 dylib | target: AB Mobile
-// defeats: anogs telemetry DNS, codesign integrity callback
-// caught by: kernel CS_VALID (handled by dev cert re-sign), server replay analysis
+// defeats: anogs telemetry DNS, codesign integrity callback, dyld image name scan
+// caught by: infoArrayCount slot still present, server replay analysis
 #pragma once
 #include <dlfcn.h>
 #include <netdb.h>
 #include <cstring>
 #include <cstdio>
 #include <mach/mach.h>
+#include <mach/task_info.h>
+#include <mach/mach_traps.h>
 #include <mach-o/dyld.h>
+#include <mach-o/dyld_images.h>
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
 
@@ -27,13 +30,12 @@ static int hooked_getaddrinfo(const char* h,const char* s,const struct addrinfo*
 static bool hooked_mis_validate(void*,void*) { return true; }
 
 static void rw_write_ptr(uintptr_t* slot, uintptr_t val) {
-    // __DATA_CONST is r-- after dyld fixups; CoW-remap before write, restore after
-    uintptr_t page  = (uintptr_t)slot & ~(uintptr_t)0x3FF;
+    // __DATA_CONST is r-- after dyld fixups; CoW-remap before write
+    uintptr_t page = (uintptr_t)slot & ~(uintptr_t)0x3FF;
     vm_protect(mach_task_self(), page, 0x400, false,
                VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
     *slot = val;
-    vm_protect(mach_task_self(), page, 0x400, false,
-               VM_PROT_READ);
+    vm_protect(mach_task_self(), page, 0x400, false, VM_PROT_READ);
 }
 
 static void rebind_symbol(const char* sym, void* rep, void** orig) {
@@ -89,9 +91,34 @@ static void rebind_symbol(const char* sym, void* rep, void** orig) {
     }
 }
 
+static void hide_from_dyld(const char* dylib_substr) {
+    task_dyld_info_data_t info{};
+    mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+    if(task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&info, &cnt) != KERN_SUCCESS)
+        return;
+    auto* all = (dyld_all_image_infos*)info.all_image_info_addr;
+    if(!all || all->version < 1) return;
+    auto* arr = (dyld_image_info*)all->infoArray;
+    if(!arr) return;
+    for(uint32_t i = 0; i < all->infoArrayCount; i++) {
+        const char* path = arr[i].imageFilePath;
+        if(!path) continue;
+        if(strstr(path, dylib_substr)) {
+            uintptr_t page = (uintptr_t)&arr[i] & ~(uintptr_t)0x3FF;
+            vm_protect(mach_task_self(), page, 0x400, false,
+                       VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+            arr[i].imageFilePath    = "";
+            arr[i].imageLoadAddress = nullptr;
+            vm_protect(mach_task_self(), page, 0x400, false, VM_PROT_READ);
+            break;
+        }
+    }
+}
+
 inline void install() {
-    rebind_symbol("getaddrinfo",      (void*)hooked_getaddrinfo,  (void**)&orig_getaddrinfo);
-    rebind_symbol("MISValidateSignature",(void*)hooked_mis_validate,(void**)&orig_mis_validate);
+    hide_from_dyld("DragonArena");  // first — before any scan window
+    rebind_symbol("getaddrinfo",         (void*)hooked_getaddrinfo,  (void**)&orig_getaddrinfo);
+    rebind_symbol("MISValidateSignature",(void*)hooked_mis_validate, (void**)&orig_mis_validate);
     fprintf(stderr,"[DragonArena] antiban installed\n");
 }
 
