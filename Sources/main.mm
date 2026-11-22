@@ -45,7 +45,6 @@ static void hooked_send_event(id self, SEL _cmd, UIEvent* event) {
     // FILL: hook game's UIPanGestureRecognizer subclass and inject aim.dx/aim.dy as location delta
 }
 
-static void install_draw_hook();
 static void try_hook(void) {
     UIWindow* win=UIApplication.sharedApplication.windows.firstObject;
     if(!win) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW,500*NSEC_PER_MSEC),
@@ -60,7 +59,6 @@ static void try_hook(void) {
     if(!found) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW,500*NSEC_PER_MSEC),
                                 dispatch_get_main_queue(),^{try_hook();}); return; }
 
-    // screen size from actual view
     CGRect bounds=found.bounds;
     overlay::g_screen_w=(float)bounds.size.width;
     overlay::g_screen_h=(float)bounds.size.height;
@@ -96,7 +94,9 @@ static void try_hook(void) {
 
 __attribute__((constructor))
 static void dragon_arena_init() {
-    antiban::install();
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(4.0*NSEC_PER_SEC)),
-                   dispatch_get_main_queue(),^{ try_hook(); });
+                   dispatch_get_main_queue(),^{
+        antiban::install();
+        try_hook();
+    });
 }
