@@ -114,14 +114,8 @@ static void hide_from_dyld(const char* dylib_substr) {
         }
     }
 }
-
 inline void install() {
-    // DNS block + codesign hook — safe at any time after dyld finishes
     rebind_symbol("getaddrinfo",         (void*)hooked_getaddrinfo,  (void**)&orig_getaddrinfo);
     rebind_symbol("MISValidateSignature",(void*)hooked_mis_validate, (void**)&orig_mis_validate);
-    // image hide — must run after main runloop starts, called from dispatch_async in main.mm
-    hide_from_dyld("DragonArena");
     fprintf(stderr,"[DragonArena] antiban installed\n");
 }
-
-} // namespace antiban
