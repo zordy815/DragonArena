@@ -120,9 +120,9 @@ static void try_hook(void) {
 
 __attribute__((constructor))
 static void dragon_arena_init() {
+    antiban::install(); // immediate — before AB scan window
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0*NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-        antiban::install();
         try_hook();
     });
 }
