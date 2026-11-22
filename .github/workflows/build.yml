@@ -18,6 +18,10 @@ jobs:
       run: |
         rm -rf Sources/imgui
         git clone --depth 1 --branch v1.88 https://github.com/ocornut/imgui Sources/imgui
+        # Inject cmath before anything else in every imgui header that uses math
+        for f in Sources/imgui/imgui.h Sources/imgui/imgui_internal.h; do
+          echo '#include <cmath>' | cat - "$f" > /tmp/_imgui_patch && mv /tmp/_imgui_patch "$f"
+        done
 
     - name: Clone fishhook
       run: |
@@ -26,17 +30,46 @@ jobs:
         cp Sources/fishhook/fishhook.h Sources/
         cp Sources/fishhook/fishhook.c Sources/
 
-    - name: Patch ImGui for iOS SDK
-      run: |
-        # Force math includes at top of imgui_internal.h
-        sed -i '' '1s/^/#include <math.h>\n#include <stdlib.h>\n#include <string.h>\n/' Sources/imgui/imgui_internal.h
-        sed -i '' '1s/^/#include <math.h>\n#include <stdlib.h>\n/' Sources/imgui/imgui.h
-
     - name: Build dylib
       run: |
         SDK=$(xcrun --sdk iphoneos --show-sdk-path)
         CLANG=$(xcrun -f clang++)
 
+        # Compile imgui cpp files as plain c++ (not objc++) so -include works cleanly
+        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
+          -std=c++17 -fvisibility=hidden -O2 \
+          -DIMGUI_DEFINE_MATH_OPERATORS \
+          -I Sources/imgui \
+          -include cmath \
+          -c Sources/imgui/imgui.cpp         -o /tmp/imgui.o
+        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
+          -std=c++17 -fvisibility=hidden -O2 \
+          -DIMGUI_DEFINE_MATH_OPERATORS \
+          -I Sources/imgui \
+          -include cmath \
+          -c Sources/imgui/imgui_draw.cpp    -o /tmp/imgui_draw.o
+        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
+          -std=c++17 -fvisibility=hidden -O2 \
+          -DIMGUI_DEFINE_MATH_OPERATORS \
+          -I Sources/imgui \
+          -include cmath \
+          -c Sources/imgui/imgui_tables.cpp  -o /tmp/imgui_tables.o
+        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
+          -std=c++17 -fvisibility=hidden -O2 \
+          -DIMGUI_DEFINE_MATH_OPERATORS \
+          -I Sources/imgui \
+          -include cmath \
+          -c Sources/imgui/imgui_widgets.cpp -o /tmp/imgui_widgets.o
+
+        # Compile imgui metal backend as objc++
+        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
+          -std=c++17 -ObjC++ -fvisibility=hidden -O2 \
+          -DIMGUI_DEFINE_MATH_OPERATORS \
+          -I Sources/imgui \
+          -include cmath \
+          -c Sources/imgui/backends/imgui_impl_metal.mm -o /tmp/imgui_metal.o
+
+        # Link everything into the dylib
         $CLANG \
           -arch arm64 \
           -isysroot "$SDK" \
@@ -52,16 +85,19 @@ jobs:
           -I Sources/imgui \
           -dynamiclib \
           -framework Foundation \
+          -framework Metal \
+          -framework MetalKit \
           -framework UIKit \
           -framework CoreGraphics \
           -install_name @rpath/DragonArena.dylib \
           -o DragonArena.dylib \
           Sources/main.mm \
           Sources/fishhook.c \
-          Sources/imgui/imgui.cpp \
-          Sources/imgui/imgui_draw.cpp \
-          Sources/imgui/imgui_tables.cpp \
-          Sources/imgui/imgui_widgets.cpp
+          /tmp/imgui.o \
+          /tmp/imgui_draw.o \
+          /tmp/imgui_tables.o \
+          /tmp/imgui_widgets.o \
+          /tmp/imgui_metal.o
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
