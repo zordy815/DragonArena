@@ -4,7 +4,7 @@
 #include <string>
 #include <cmath>
 #include "memory.h"
-#include "math.h"
+#include "ue4_math.h"
 #include "ue4_types.h"
 #include "imgui/imgui.h"
 #include "imgui/backends/imgui_impl_metal.h"
