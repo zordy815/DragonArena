@@ -23,19 +23,19 @@ jobs:
 
           CXXFLAGS="-arch arm64 -isysroot $SDK -mios-version-min=14.0 \
             -std=c++17 -ObjC++ -fvisibility=hidden -O2 \
-            -I Sources -I imgui -I imgui/backends"
+            -I Sources -I Sources/imgui -I Sources/imgui/backends"
 
           LDFLAGS="-dynamiclib -arch arm64 -isysroot $SDK -mios-version-min=14.0 \
             -framework Foundation -framework Metal -framework MetalKit \
             -framework UIKit -framework CoreGraphics \
-            -install_name @rpath/DragonArena.dylib"
+            -install_name @executable_path/DragonArena.dylib"
 
-          $CLANG $CXXFLAGS -c imgui/imgui.cpp                        -o imgui.o
-          $CLANG $CXXFLAGS -c imgui/imgui_draw.cpp                   -o imgui_draw.o
-          $CLANG $CXXFLAGS -c imgui/imgui_tables.cpp                 -o imgui_tables.o
-          $CLANG $CXXFLAGS -c imgui/imgui_widgets.cpp                -o imgui_widgets.o
-          $CLANG $CXXFLAGS -fobjc-arc -c imgui/backends/imgui_impl_metal.mm -o imgui_impl_metal.o
-          $CLANG $CXXFLAGS -fobjc-arc -c Sources/main.mm             -o main.o
+          $CLANG $CXXFLAGS -c Sources/imgui/imgui.cpp                               -o imgui.o
+          $CLANG $CXXFLAGS -c Sources/imgui/imgui_draw.cpp                          -o imgui_draw.o
+          $CLANG $CXXFLAGS -c Sources/imgui/imgui_tables.cpp                        -o imgui_tables.o
+          $CLANG $CXXFLAGS -c Sources/imgui/imgui_widgets.cpp                       -o imgui_widgets.o
+          $CLANG $CXXFLAGS -fobjc-arc -c Sources/imgui/backends/imgui_impl_metal.mm -o imgui_impl_metal.o
+          $CLANG $CXXFLAGS -fobjc-arc -c Sources/main.mm                            -o main.o
 
           $CLANG $LDFLAGS -o DragonArena.dylib \
             main.o imgui.o imgui_draw.o imgui_tables.o imgui_widgets.o imgui_impl_metal.o
