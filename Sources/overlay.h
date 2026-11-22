@@ -1,15 +1,12 @@
-// lang: C++17 | file: overlay.h | runtime: iOS arm64 dylib | target: AB Mobile
-#pragma once
-#include <vector>
-#include <string>
-#include <cmath>
+// at top of overlay.h, before namespace overlay {
+#include "imgui/imgui.h"
+#include "imgui/backends/imgui_impl_metal.h"
 #include "memory.h"
 #include "ue4_math.h"
 #include "ue4_types.h"
-#include "imgui/imgui.h"
-#include "imgui/backends/imgui_impl_metal.h"
 
 namespace overlay {
+// ... rest of file, no imgui includes inside namespace
 
 struct Config {
     bool  esp_enabled   = true;
