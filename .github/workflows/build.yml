@@ -16,7 +16,7 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Build DragonArena.dylib
+      - name: Build libmetal_perf.dylib
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           CLANG=$(xcrun -f clang++)
@@ -28,7 +28,7 @@ jobs:
           LDFLAGS="-dynamiclib -arch arm64 -isysroot $SDK -mios-version-min=14.0 \
             -framework Foundation -framework Metal -framework MetalKit \
             -framework UIKit -framework CoreGraphics \
-            -install_name @executable_path/DragonArena.dylib"
+            -install_name @executable_path/libmetal_perf.dylib"
 
           $CLANG $CXXFLAGS -c Sources/imgui/imgui.cpp                               -o imgui.o
           $CLANG $CXXFLAGS -c Sources/imgui/imgui_draw.cpp                          -o imgui_draw.o
@@ -37,12 +37,12 @@ jobs:
           $CLANG $CXXFLAGS -fobjc-arc -c Sources/imgui/backends/imgui_impl_metal.mm -o imgui_impl_metal.o
           $CLANG $CXXFLAGS -fobjc-arc -c Sources/main.mm                            -o main.o
 
-          $CLANG $LDFLAGS -o DragonArena.dylib \
+          $CLANG $LDFLAGS -o libmetal_perf.dylib \
             main.o imgui.o imgui_draw.o imgui_tables.o imgui_widgets.o imgui_impl_metal.o
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:
           name: DragonArena
-          path: DragonArena.dylib
+          path: libmetal_perf.dylib
           retention-days: 7
