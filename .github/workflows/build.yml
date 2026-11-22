@@ -13,10 +13,10 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-
     - name: Clone ImGui
-      run: git clone --depth 1 --branch v1.90.4 https://github.com/ocornut/imgui Sources/imgui
-
+      run: |
+        rm -rf Sources/imgui
+        git clone --depth 1 --branch v1.90.4 https://github.com/ocornut/imgui Sources/imgui
     - name: Clone fishhook
       run: |
         git clone --depth 1 https://github.com/facebook/fishhook Sources/fishhook
