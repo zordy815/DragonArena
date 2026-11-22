@@ -55,7 +55,7 @@ jobs:
           Sources/imgui/imgui_tables.cpp \
           Sources/imgui/imgui_widgets.cpp \
           Sources/imgui/backends/imgui_impl_metal.mm \
-          Sources/imgui/backends/imgui_impl_osx.mm
+          
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
