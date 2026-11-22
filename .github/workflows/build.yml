@@ -1,48 +1,65 @@
-name: DragonArena build
+name: Build DragonArena.dylib
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive 
-      - name: Import signing cert
-        env:
-          CERT_P12_B64: ${{ secrets.CERT_P12_B64 }}
-          CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
-        run: |
-          echo "$CERT_P12_B64" | base64 --decode > /tmp/cert.p12
-          security create-keychain -p "" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
-          security import /tmp/cert.p12 -k build.keychain \
-            -P "$CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: \
-            -s -k "" build.keychain
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Build dylib
-        env:
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-        run: |
-          sed -i '' "s/FILL_YOUR_TEAM_ID/$TEAM_ID/" Makefile
-          make
+    - name: Clone ImGui
+      run: git clone --depth 1 --branch v1.90.4 https://github.com/ocornut/imgui Sources/imgui
 
-      - name: Sign dylib
-        env:
-          TEAM_ID: ${{ secrets.TEAM_ID }}
-        run: make sign
+    - name: Clone fishhook
+      run: |
+        git clone --depth 1 https://github.com/facebook/fishhook Sources/fishhook
+        cp Sources/fishhook/fishhook.h Sources/
+        cp Sources/fishhook/fishhook.c Sources/
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: DragonArena-dylib
-          path: DragonArena.dylib
-          retention-days: 7
+    - name: Build dylib
+      run: |
+        SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+        CLANG=$(xcrun -f clang++)
+
+        $CLANG \
+          -arch arm64 \
+          -isysroot $SDK \
+          -mios-version-min=14.0 \
+          -std=c++17 \
+          -ObjC++ \
+          -fvisibility=hidden \
+          -O2 \
+          -DTARGET_OS_IPHONE=1 \
+          -DFISHHOOK_AVAILABLE=1 \
+          -I Sources \
+          -I Sources/imgui \
+          -dynamiclib \
+          -framework Foundation \
+          -framework Metal \
+          -framework MetalKit \
+          -framework UIKit \
+          -framework CoreGraphics \
+          -install_name @rpath/DragonArena.dylib \
+          -o DragonArena.dylib \
+          Sources/main.mm \
+          Sources/fishhook.c \
+          Sources/imgui/imgui.cpp \
+          Sources/imgui/imgui_draw.cpp \
+          Sources/imgui/imgui_tables.cpp \
+          Sources/imgui/imgui_widgets.cpp \
+          Sources/imgui/backends/imgui_impl_metal.mm \
+          Sources/imgui/backends/imgui_impl_osx.mm
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: DragonArena-dylib
+        path: DragonArena.dylib
+        retention-days: 7
