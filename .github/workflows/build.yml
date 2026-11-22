@@ -20,22 +20,25 @@ jobs:
         run: |
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           CLANG=$(xcrun -f clang++)
-          CC=$(xcrun -f clang)
 
-          CXXFLAGS="-arch arm64 -isysroot $SDK -mios-version-min=14.0 -std=c++17 -ObjC++ -fvisibility=hidden -O2 -I Sources -I imgui -I fishhook -include cmath"
-          CFLAGS="-arch arm64 -isysroot $SDK -mios-version-min=14.0 -O2 -I fishhook"
-          LDFLAGS="-dynamiclib -arch arm64 -isysroot $SDK -mios-version-min=14.0 -framework Foundation -framework Metal -framework MetalKit -framework UIKit -framework CoreGraphics -install_name @rpath/DragonArena.dylib"
+          CXXFLAGS="-arch arm64 -isysroot $SDK -mios-version-min=14.0 \
+            -std=c++17 -ObjC++ -fvisibility=hidden -O2 \
+            -I Sources -I imgui -I imgui/backends"
 
-          $CLANG $CXXFLAGS -c imgui/imgui.cpp -o imgui.o
-          $CLANG $CXXFLAGS -c imgui/imgui_draw.cpp -o imgui_draw.o
-          $CLANG $CXXFLAGS -c imgui/imgui_tables.cpp -o imgui_tables.o
-          $CLANG $CXXFLAGS -c imgui/imgui_widgets.cpp -o imgui_widgets.o
-          $CLANG $CXXFLAGS -fobjc-arc -c backends/imgui_impl_metal.mm -o imgui_impl_metal.o
+          LDFLAGS="-dynamiclib -arch arm64 -isysroot $SDK -mios-version-min=14.0 \
+            -framework Foundation -framework Metal -framework MetalKit \
+            -framework UIKit -framework CoreGraphics \
+            -install_name @rpath/DragonArena.dylib"
 
-          $CLANG $CXXFLAGS $LDFLAGS -o DragonArena.dylib \
-            Sources/main.mm \
-            imgui.o imgui_draw.o imgui_tables.o imgui_widgets.o \
-            imgui_impl_metal.o
+          $CLANG $CXXFLAGS -c imgui/imgui.cpp                        -o imgui.o
+          $CLANG $CXXFLAGS -c imgui/imgui_draw.cpp                   -o imgui_draw.o
+          $CLANG $CXXFLAGS -c imgui/imgui_tables.cpp                 -o imgui_tables.o
+          $CLANG $CXXFLAGS -c imgui/imgui_widgets.cpp                -o imgui_widgets.o
+          $CLANG $CXXFLAGS -fobjc-arc -c imgui/backends/imgui_impl_metal.mm -o imgui_impl_metal.o
+          $CLANG $CXXFLAGS -fobjc-arc -c Sources/main.mm             -o main.o
+
+          $CLANG $LDFLAGS -o DragonArena.dylib \
+            main.o imgui.o imgui_draw.o imgui_tables.o imgui_widgets.o imgui_impl_metal.o
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4
