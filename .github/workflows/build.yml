@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-13
     timeout-minutes: 15
 
     steps:
@@ -18,10 +18,6 @@ jobs:
       run: |
         rm -rf Sources/imgui
         git clone --depth 1 --branch v1.88 https://github.com/ocornut/imgui Sources/imgui
-        # Inject cmath before anything else in every imgui header that uses math
-        for f in Sources/imgui/imgui.h Sources/imgui/imgui_internal.h; do
-          echo '#include <cmath>' | cat - "$f" > /tmp/_imgui_patch && mv /tmp/_imgui_patch "$f"
-        done
 
     - name: Clone fishhook
       run: |
@@ -34,42 +30,9 @@ jobs:
       run: |
         SDK=$(xcrun --sdk iphoneos --show-sdk-path)
         CLANG=$(xcrun -f clang++)
+        echo "SDK: $SDK"
+        echo "Clang: $CLANG"
 
-        # Compile imgui cpp files as plain c++ (not objc++) so -include works cleanly
-        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
-          -std=c++17 -fvisibility=hidden -O2 \
-          -DIMGUI_DEFINE_MATH_OPERATORS \
-          -I Sources/imgui \
-          -include cmath \
-          -c Sources/imgui/imgui.cpp         -o /tmp/imgui.o
-        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
-          -std=c++17 -fvisibility=hidden -O2 \
-          -DIMGUI_DEFINE_MATH_OPERATORS \
-          -I Sources/imgui \
-          -include cmath \
-          -c Sources/imgui/imgui_draw.cpp    -o /tmp/imgui_draw.o
-        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
-          -std=c++17 -fvisibility=hidden -O2 \
-          -DIMGUI_DEFINE_MATH_OPERATORS \
-          -I Sources/imgui \
-          -include cmath \
-          -c Sources/imgui/imgui_tables.cpp  -o /tmp/imgui_tables.o
-        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
-          -std=c++17 -fvisibility=hidden -O2 \
-          -DIMGUI_DEFINE_MATH_OPERATORS \
-          -I Sources/imgui \
-          -include cmath \
-          -c Sources/imgui/imgui_widgets.cpp -o /tmp/imgui_widgets.o
-
-        # Compile imgui metal backend as objc++
-        $CLANG -arch arm64 -isysroot "$SDK" -mios-version-min=14.0 \
-          -std=c++17 -ObjC++ -fvisibility=hidden -O2 \
-          -DIMGUI_DEFINE_MATH_OPERATORS \
-          -I Sources/imgui \
-          -include cmath \
-          -c Sources/imgui/backends/imgui_impl_metal.mm -o /tmp/imgui_metal.o
-
-        # Link everything into the dylib
         $CLANG \
           -arch arm64 \
           -isysroot "$SDK" \
@@ -78,6 +41,7 @@ jobs:
           -ObjC++ \
           -fvisibility=hidden \
           -O2 \
+          -Wno-nontrivial-memcall \
           -DTARGET_OS_IPHONE=1 \
           -DFISHHOOK_AVAILABLE=1 \
           -DIMGUI_DEFINE_MATH_OPERATORS \
@@ -93,11 +57,11 @@ jobs:
           -o DragonArena.dylib \
           Sources/main.mm \
           Sources/fishhook.c \
-          /tmp/imgui.o \
-          /tmp/imgui_draw.o \
-          /tmp/imgui_tables.o \
-          /tmp/imgui_widgets.o \
-          /tmp/imgui_metal.o
+          Sources/imgui/imgui.cpp \
+          Sources/imgui/imgui_draw.cpp \
+          Sources/imgui/imgui_tables.cpp \
+          Sources/imgui/imgui_widgets.cpp \
+          Sources/imgui/backends/imgui_impl_metal.mm
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
