@@ -42,60 +42,86 @@ static void hooked_send_event(id self, SEL _cmd, UIEvent* event) {
     if(!overlay::cfg.aim_enabled) return;
     auto aim=overlay::get_aim_target();
     if(!aim.valid) return;
-    // FILL: hook game's UIPanGestureRecognizer subclass and inject aim.dx/aim.dy as location delta
+    // FILL: inject aim.dx/aim.dy into game input
+}
+
+static UIWindow* get_key_window() {
+    for(UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
+        if(![scene isKindOfClass:[UIWindowScene class]]) continue;
+        UIWindowScene* ws=(UIWindowScene*)scene;
+        for(UIWindow* w in ws.windows) {
+            if(w.isKeyWindow) return w;
+        }
+        if(ws.windows.count) return ws.windows.firstObject;
+    }
+    return nil;
 }
 
 static void try_hook(void) {
-    UIWindow* win=UIApplication.sharedApplication.windows.firstObject;
-    if(!win) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW,500*NSEC_PER_MSEC),
-                              dispatch_get_main_queue(),^{try_hook();}); return; }
-    __block MTKView* found=nil;
-    NSMutableArray* q=[NSMutableArray arrayWithObject:win];
-    while(q.count&&!found) {
-        UIView* v=q.firstObject; [q removeObjectAtIndex:0];
-        if([v isKindOfClass:[MTKView class]]) { found=(MTKView*)v; break; }
-        [q addObjectsFromArray:v.subviews];
+    UIWindow* win = get_key_window();
+    if(!win) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500*NSEC_PER_MSEC),
+                       dispatch_get_main_queue(), ^{ try_hook(); });
+        return;
     }
-    if(!found) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW,500*NSEC_PER_MSEC),
-                                dispatch_get_main_queue(),^{try_hook();}); return; }
 
-    CGRect bounds=found.bounds;
-    overlay::g_screen_w=(float)bounds.size.width;
-    overlay::g_screen_h=(float)bounds.size.height;
+    __block MTKView* found = nil;
+    NSMutableArray* q = [NSMutableArray arrayWithObject:win];
+    while(q.count && !found) {
+        UIView* v = q.firstObject;
+        [q removeObjectAtIndex:0];
+        if([v isKindOfClass:[MTKView class]]) { found=(MTKView*)v; break; }
+        for(UIView* sub in v.subviews) [q addObject:sub];
+    }
 
-    g_device=found.device?:MTLCreateSystemDefaultDevice();
-    g_queue=[g_device newCommandQueue];
+    if(!found) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500*NSEC_PER_MSEC),
+                       dispatch_get_main_queue(), ^{ try_hook(); });
+        return;
+    }
+
+    CGRect bounds = found.bounds;
+    overlay::g_screen_w = (float)bounds.size.width;
+    overlay::g_screen_h = (float)bounds.size.height;
+
+    g_device = found.device ?: MTLCreateSystemDefaultDevice();
+    g_queue  = [g_device newCommandQueue];
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io=ImGui::GetIO();
-    io.DisplaySize=ImVec2(overlay::g_screen_w,overlay::g_screen_h);
-    io.FontGlobalScale=1.5f;
+    ImGuiIO& io = ImGui::GetIO();
+    io.DisplaySize   = ImVec2(overlay::g_screen_w, overlay::g_screen_h);
+    io.FontGlobalScale = 1.5f;
     ImGui::StyleColorsDark();
     ImGui_ImplMetal_Init(g_device);
-    g_imgui_ready=true;
+    g_imgui_ready = true;
 
-    id delegate=found.delegate;
+    id delegate = found.delegate;
     if(delegate) {
-        Class cls=object_getClass(delegate);
-        SEL sel=@selector(drawInMTKView:);
-        Method m=class_getInstanceMethod(cls,sel);
-        if(m) { orig_draw_in_view=method_getImplementation(m);
-                method_setImplementation(m,(IMP)hooked_draw_in_view); }
+        Class cls = object_getClass(delegate);
+        SEL sel   = @selector(drawInMTKView:);
+        Method m  = class_getInstanceMethod(cls, sel);
+        if(m) {
+            orig_draw_in_view = method_getImplementation(m);
+            method_setImplementation(m, (IMP)hooked_draw_in_view);
+        }
     }
 
-    Class ac=object_getClass(UIApplication.sharedApplication);
-    Method sm=class_getInstanceMethod(ac,@selector(sendEvent:));
-    if(sm) { orig_send_event=method_getImplementation(sm);
-             method_setImplementation(sm,(IMP)hooked_send_event); }
+    Class ac  = object_getClass(UIApplication.sharedApplication);
+    Method sm = class_getInstanceMethod(ac, @selector(sendEvent:));
+    if(sm) {
+        orig_send_event = method_getImplementation(sm);
+        method_setImplementation(sm, (IMP)hooked_send_event);
+    }
 
-    fprintf(stderr,"[DragonArena] hooks installed. GWorld=%lX\n",mem::get_uworld());
+    uintptr_t w = mem::get_uworld();
+    fprintf(stderr, "[DragonArena] hooks installed. GWorld=%lX\n", w);
 }
 
 __attribute__((constructor))
 static void dragon_arena_init() {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(4.0*NSEC_PER_SEC)),
-                   dispatch_get_main_queue(),^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0*NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
         antiban::install();
         try_hook();
     });
